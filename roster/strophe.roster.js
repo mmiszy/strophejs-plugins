@@ -43,6 +43,10 @@ Strophe.addConnectionPlugin('roster',
      * always null if server doesn't support xep 237
      */
     ver : null,
+    /** Property: tempStanzas
+     * storage of stanzas in case roster didn't yet receive initial response
+     */
+    tempStanzas : [],
     /** Function: init
      * Plugin init
      *
@@ -129,7 +133,7 @@ Strophe.addConnectionPlugin('roster',
             this.items = items || [];
         }
         var iq = $iq({type: 'get',  'id' : this._connection.getUniqueId('roster')}).c('query', attrs);
-        this._connection.sendIQ(iq,
+        return this._connection.sendIQ(iq,
                                 this._onReceiveRosterSuccess.bind(this, userCallback),
                                 this._onReceiveRosterError.bind(this, userCallback));
     },
@@ -277,7 +281,7 @@ Strophe.addConnectionPlugin('roster',
         {
             iq.c('group').t(newGroups[i]).up();
         }
-        this._connection.sendIQ(iq, call_back, call_back);
+        return this._connection.sendIQ(iq, call_back, call_back);
     },
     /** Function: remove
      * Remove roster item
@@ -303,6 +307,12 @@ Strophe.addConnectionPlugin('roster',
     _onReceiveRosterSuccess: function(userCallback, stanza)
     {
         this._updateItems(stanza);
+        if (this.tempStanzas.length > 0) {
+            for(var i = 0, z = this.tempStanzas.length; i < z; ++i) {
+                this._onReceivePresence(this.tempStanzas[i]);
+            }
+            this.tempStanzas.length = 0;    // deletes the array without use of garbage collector
+        }
         userCallback(this.items);
     },
     /** PrivateFunction: _onReceiveRosterError
@@ -324,6 +334,9 @@ Strophe.addConnectionPlugin('roster',
         // not in roster
         if (!item)
         {
+            if (Strophe.getBareJidFromJid(this._connection.jid) !== Strophe.getBareJidFromJid(jid)) {
+                this.tempStanzas[this.tempStanzas.length] = presence;
+            }
             return true;
         }
         var type = presence.getAttribute('type');
